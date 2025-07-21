@@ -2,30 +2,34 @@
 version: '3.8'
 
 services:
+  vault-init:
+    image: alpine:latest
+    volumes:
+      - vault-data:/vault/data
+      - vault-logs:/vault/logs
+    command: |
+      sh -c "
+        chown -R 100:1000 /vault/data /vault/logs &&
+        chmod -R 755 /vault/data /vault/logs
+      "
+
   vault:
     image: hashicorp/vault:1.15
     container_name: vault-prod
     restart: unless-stopped
+    depends_on:
+      - vault-init
     ports:
       - "8200:8200"
       - "8201:8201"
     environment:
       VAULT_ADDR: https://0.0.0.0:8200
-      VAULT_LOCAL_CONFIG: |
-        {
-          "backend": {"file": {"path": "/vault/data"}},
-          "listener": {"tcp": {"address": "0.0.0.0:8200", "tls_disable": false}},
-          "default_lease_ttl": "168h",
-          "max_lease_ttl": "720h",
-          "ui": true
-        }
-    cap_add:
-      - IPC_LOCK
+      VAULT_API_ADDR: https://0.0.0.0:8200
+      VAULT_DISABLE_MLOCK: "true"
     volumes:
       - vault-data:/vault/data
       - vault-logs:/vault/logs
-      - vault-config:/vault/config
-      - ./vault-config.hcl:/vault/config/vault.hcl:ro
+      - ./vault.hcl:/vault/config/vault.hcl:ro
       - ./certs:/vault/certs:ro
     command: vault server -config=/vault/config/vault.hcl
     networks:
