@@ -1,0 +1,287 @@
+ # Frontend Task: Add File Upload Support to Roster
+  Submission
+
+  ## Context
+  The backend `/api/v1/roster/submit` endpoint has
+  been updated to support file uploads while
+  maintaining backward compatibility. Currently, our
+  frontend sends JSON data, but we want to add file
+  upload capability to save the original Excel files.
+
+  ## Current Implementation
+  The frontend currently sends roster data as JSON:
+  ```javascript
+  fetch('/api/v1/roster/submit', {
+      method: 'POST',
+      headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+          roster_data: parsedRosterData,
+          title: rosterTitle,
+          description: rosterDescription,
+          roster_start_date: startDate,
+          roster_end_date: endDate,
+          week_off_config: weekOffConfig
+      })
+  })
+
+  Required Changes
+
+  1. Update Roster Submission Function
+
+  Change the roster submission to use FormData instead
+   of JSON when a file is available:
+
+  // NEW IMPLEMENTATION
+  function submitRosterWithFile(rosterData, 
+  formFields, excelFile = null) {
+      const formData = new FormData();
+
+      // Add all form fields
+      formData.append('roster_data',
+  JSON.stringify(rosterData));
+      formData.append('title', formFields.title);
+      formData.append('description',
+  formFields.description || '');
+      formData.append('roster_start_date',
+  formFields.roster_start_date);
+      formData.append('roster_end_date',
+  formFields.roster_end_date);
+      formData.append('week_off_config',
+  JSON.stringify(formFields.week_off_config || []));
+
+      // Add file if provided
+      if (excelFile) {
+          formData.append('file', excelFile);
+      }
+
+      return fetch('/api/v1/roster/submit', {
+          method: 'POST',
+          headers: {
+              'Authorization': `Bearer 
+  ${getAuthToken()}`
+              // DO NOT include Content-Type - let 
+  browser set it for FormData
+          },
+          body: formData
+      });
+  }
+
+  2. File Input Integration
+
+  Add file input handling to capture the original
+  Excel file:
+
+  // Add this to your roster upload form
+  function handleFileSelection(event) {
+      const file = event.target.files[0];
+      if (file) {
+          // Validate file type
+          const allowedTypes = ['.xlsx', '.xls',
+  '.csv'];
+          const fileExtension = '.' +
+  file.name.split('.').pop().toLowerCase();
+
+          if (!allowedTypes.includes(fileExtension)) {
+              alert(`Invalid file type. Please upload:
+   ${allowedTypes.join(', ')}`);
+              event.target.value = ''; // Clear 
+  selection
+              return;
+          }
+
+          // Store file for submission
+          window.selectedRosterFile = file;
+
+          // Update UI to show selected file
+          updateFileDisplay(file);
+      }
+  }
+
+  function updateFileDisplay(file) {
+      const displayElement =
+  document.getElementById('file-display');
+      if (displayElement) {
+          displayElement.innerHTML = `
+              <span class="file-info">
+                  📎 ${file.name} (${(file.size / 
+  1024).toFixed(1)} KB)
+              </span>
+          `;
+      }
+  }
+
+  3. Update Form HTML
+
+  Add file input to your roster upload form:
+
+  <!-- Add this to your roster upload form -->
+  <div class="form-group">
+      <label for="roster-file">Upload Original Excel
+  File (Optional)</label>
+      <input 
+          type="file" 
+          id="roster-file" 
+          name="roster-file"
+          accept=".xlsx,.xls,.csv"
+          onchange="handleFileSelection(event)"
+          class="form-control-file"
+      >
+      <small class="form-text text-muted">
+          Supported formats: .xlsx, .xls, .csv
+      </small>
+      <div id="file-display" class="mt-2"></div>
+  </div>
+
+  4. Update Main Submission Handler
+
+  Modify your existing roster submission function:
+
+  // Update your existing function like this
+  async function submitRoster(rosterData, formFields) 
+  {
+      try {
+          // Show loading state
+          showLoadingSpinner();
+
+          // Use the file if one was selected
+          const selectedFile =
+  window.selectedRosterFile || null;
+
+          // Call the updated submission function
+          const response = await
+  submitRosterWithFile(rosterData, formFields,
+  selectedFile);
+
+          if (response.ok) {
+              const result = await response.json();
+
+              // Handle success - now includes file 
+  information
+              handleSubmissionSuccess(result);
+
+              // Log file information if available
+              if (result.file_path) {
+                  console.log(`✅ File saved: 
+  ${result.original_filename} → ${result.file_path}`);
+              }
+
+          } else {
+              const error = await response.json();
+              handleSubmissionError(error);
+          }
+
+      } catch (error) {
+          console.error('Submission failed:', error);
+          handleSubmissionError(error);
+      } finally {
+          hideLoadingSpinner();
+          // Clear file selection after submission
+          clearFileSelection();
+      }
+  }
+
+  function clearFileSelection() {
+      const fileInput =
+  document.getElementById('roster-file');
+      if (fileInput) {
+          fileInput.value = '';
+      }
+      window.selectedRosterFile = null;
+
+      const displayElement =
+  document.getElementById('file-display');
+      if (displayElement) {
+          displayElement.innerHTML = '';
+      }
+  }
+
+  5. Enhanced Success Handling
+
+  Update success handling to show file information:
+
+  function handleSubmissionSuccess(result) {
+      // Your existing success handling...
+
+      // Show file upload confirmation if file was 
+  uploaded
+      if (result.file_path &&
+  result.original_filename) {
+          const fileMessage = `
+              <div class="alert alert-success mt-2">
+                  <strong>File Uploaded 
+  Successfully!</strong><br>
+                  📎 ${result.original_filename} 
+  (${(result.file_size / 1024).toFixed(1)} KB)<br>
+                  <small>Saved as: 
+  ${result.file_path}</small>
+              </div>
+          `;
+
+          // Add to your success message area
+          document.getElementById('success-messages').
+  innerHTML += fileMessage;
+      }
+  }
+
+  Technical Notes
+
+  Important Details:
+
+  1. No Content-Type header - When using FormData,
+  don't set Content-Type header. Let the browser set
+  it automatically.
+  2. File validation - Validate file types on frontend
+   (.xlsx, .xls, .csv only)
+  3. JSON stringification - Convert arrays/objects to
+  JSON strings when adding to FormData
+  4. Backward compatibility - The endpoint still
+  accepts JSON requests, so you can migrate gradually
+
+  API Response Changes:
+
+  The response now includes file information:
+  {
+      "id": "uuid-here",
+      "title": "Roster Submission",
+      // ... other fields
+      "original_filename": "roster_data.xlsx",    // 
+  NEW
+      "file_path": "media/rosters/roster_20250807_1458
+  30_EMPID123.xlsx",  // NEW  
+      "file_size": 15234,  // NEW (bytes)
+      // ... rest of response
+  }
+
+  Error Handling:
+
+  Handle new file-related errors:
+  function handleSubmissionError(error) {
+      // Your existing error handling...
+
+      // Handle file-specific errors
+      if (error.detail &&
+  error.detail.includes('Invalid file type')) {
+          showFileError('Please upload a valid Excel 
+  or CSV file (.xlsx, .xls, .csv)');
+      } else if (error.detail &&
+  error.detail.includes('file')) {
+          showFileError('File upload failed. Please 
+  try again or submit without file.');
+      }
+  }
+
+  Testing Checklist
+
+  - File upload works with .xlsx files
+  - File upload works with .xls files
+  - File upload works with .csv files
+  - Invalid file types are rejected
+  - Submission without file still works (backward
+  compatibility)
+  - File information appears in success message
+  - Large files (>10MB) are handled appropriately
+  - File selection can be cleared/changed
+  - Error handling works for file-related errors
