@@ -1,24 +1,26 @@
-ui = true
-disable_mlock = true
-
 storage "file" {
   path = "/vault/data"
 }
 
 listener "tcp" {
-  address = "0.0.0.0:8200"
-  tls_disable = false
-  tls_cert_file = "/vault/certs/vault.crt"
-  tls_key_file = "/vault/certs/vault.key"
+  address       = "0.0.0.0:8200"
+  # Using .cer and .key files directly
+  tls_cert_file = "/vault/certs/vault-server.cer"
+  tls_key_file  = "/vault/certs/vault-server.key"
+  tls_min_version = "tls12"
 }
 
-api_addr = "https://0.0.0.0:8200"
-cluster_addr = "https://0.0.0.0:8201"
+# Enable UI
+ui = true
 
-default_lease_ttl = "168h"
-max_lease_ttl = "720h"
+# API address
+api_addr = "https://127.0.0.1:8200"
 
-log_level = "Info"
-log_file = "/vault/logs/vault.log"
-log_rotate_duration = "24h"
-log_rotate_max_files = 30
+# Cluster address
+cluster_addr = "https://127.0.0.1:8201"
+
+# Disable mlock for Docker environment
+disable_mlock = true
+
+# Log level
+log_level = "INFO"
